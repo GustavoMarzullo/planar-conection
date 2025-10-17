@@ -87,7 +87,7 @@ else:
 ## Estrutura relevante
 
 ```
-Conectar_pontos/
+planar-conection/
   build.sh
   planar_connection.py
   linux/
@@ -95,3 +95,4 @@ Conectar_pontos/
   windows/
     planar_solver.dll
 ```
+
