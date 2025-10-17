@@ -9,8 +9,8 @@ set -u -o pipefail
 # Criar pastas de destino
 mkdir -p linux windows
 
-LINUX_CMD=(g++ -O3 -march=native -mtune=native -flto -shared -fPIC -o linux/planar_solver.so cpp_backend.cpp -std=c++17)
-WIN_CMD=(x86_64-w64-mingw32-g++ -O3 -march=x86-64 -mtune=generic -flto -shared -static-libgcc -static-libstdc++ -o windows/planar_solver.dll cpp_backend.cpp -std=c++17)
+LINUX_CMD=(g++ -O3 -march=native -mtune=native -flto -ffast-math -funroll-loops -finline-functions -fomit-frame-pointer -shared -fPIC -o linux/planar_solver.so cpp_backend.cpp -std=c++17)
+WIN_CMD=(x86_64-w64-mingw32-g++ -O3 -march=x86-64 -mtune=generic -flto -ffast-math -funroll-loops -finline-functions -shared -static-libgcc -static-libstdc++ -o windows/planar_solver.dll cpp_backend.cpp -std=c++17)
 
 linux_status=1
 win_status=1

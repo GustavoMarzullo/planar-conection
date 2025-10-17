@@ -13,46 +13,53 @@
 // Definições de estruturas
 struct Point {
     double x, y;
-    Point(double x_ = 0, double y_ = 0) : x(x_), y(y_) {}
+    constexpr Point(double x_ = 0, double y_ = 0) noexcept : x(x_), y(y_) {}
+    
+    // Operador de igualdade aproximada (inline para melhor performance)
+    inline bool near_equal(const Point& other, double eps = 1e-9) const noexcept {
+        const double dx = x - other.x;
+        const double dy = y - other.y;
+        return (dx * dx + dy * dy) < eps * eps;
+    }
 };
 
-struct Path {
-    std::vector<Point> points;
+// Estrutura de segmento para melhor cache locality
+struct Segment {
+    Point p1, p2;
+    constexpr Segment(const Point& a, const Point& b) noexcept : p1(a), p2(b) {}
 };
 
-// Função auxiliar: teste CCW
-inline bool ccw(const Point& A, const Point& B, const Point& C) {
+// Função auxiliar: teste CCW otimizado
+inline bool ccw(const Point& A, const Point& B, const Point& C) noexcept {
     return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
 }
 
-// Função auxiliar: verifica se dois segmentos se cruzam
+// Função auxiliar: verifica se dois segmentos se cruzam (OTIMIZADA)
 inline bool segments_intersect(const Point& p1, const Point& p2, 
-                               const Point& p3, const Point& p4) {
-    const double eps = 1e-9;
+                               const Point& p3, const Point& p4) noexcept {
+    constexpr double eps = 1e-9;
     
-    // Verificar se compartilham endpoints
-    if ((std::abs(p1.x - p3.x) < eps && std::abs(p1.y - p3.y) < eps) ||
-        (std::abs(p1.x - p4.x) < eps && std::abs(p1.y - p4.y) < eps) ||
-        (std::abs(p2.x - p3.x) < eps && std::abs(p2.y - p3.y) < eps) ||
-        (std::abs(p2.x - p4.x) < eps && std::abs(p2.y - p4.y) < eps)) {
+    // Verificar se compartilham endpoints (versão otimizada)
+    if (p1.near_equal(p3, eps) || p1.near_equal(p4, eps) ||
+        p2.near_equal(p3, eps) || p2.near_equal(p4, eps)) {
         return false;
     }
     
-    return (ccw(p1, p3, p4) != ccw(p2, p3, p4)) && 
-           (ccw(p1, p2, p3) != ccw(p1, p2, p4));
+    // Teste CCW otimizado (apenas duas comparações)
+    const bool ccw1 = ccw(p1, p3, p4);
+    const bool ccw2 = ccw(p2, p3, p4);
+    const bool ccw3 = ccw(p1, p2, p3);
+    const bool ccw4 = ccw(p1, p2, p4);
+    
+    return (ccw1 != ccw2) && (ccw3 != ccw4);
 }
 
-// Verifica se um novo caminho cruza com caminhos existentes
-inline bool path_crosses_existing(const Path& new_path, 
-                                  const std::vector<Path>& existing_paths) {
-    for (const auto& existing : existing_paths) {
-        for (size_t i = 0; i < new_path.points.size() - 1; ++i) {
-            for (size_t j = 0; j < existing.points.size() - 1; ++j) {
-                if (segments_intersect(new_path.points[i], new_path.points[i+1],
-                                     existing.points[j], existing.points[j+1])) {
-                    return true;
-                }
-            }
+// Versão otimizada usando segmentos pré-computados
+inline bool segment_intersects_any(const Segment& seg, 
+                                   const std::vector<Segment>& existing_segments) noexcept {
+    for (const auto& existing : existing_segments) {
+        if (segments_intersect(seg.p1, seg.p2, existing.p1, existing.p2)) {
+            return true;
         }
     }
     return false;
@@ -76,20 +83,27 @@ extern "C" {
         long long max_iterations) {
         
         // Criar vetores de pontos
-        std::vector<Point> pointsA(n), pointsB(n_acima);
-        Point target(target_x, target_y);
+        std::vector<Point> pointsA, pointsB;
+        pointsA.reserve(n);
+        pointsB.reserve(n_acima);
+        
+        const Point target(target_x, target_y);
         
         for (int i = 0; i < n; ++i) {
-            pointsA[i] = Point(points_A_x[i], points_A_y[i]);
+            pointsA.emplace_back(points_A_x[i], points_A_y[i]);
         }
         
         for (int i = 0; i < n_acima; ++i) {
-            pointsB[i] = Point(points_B_x[i], points_B_y[i]);
+            pointsB.emplace_back(points_B_x[i], points_B_y[i]);
         }
         
         // Criar permutação inicial de B
         std::vector<int> b_perm(n_acima);
         for (int i = 0; i < n_acima; ++i) b_perm[i] = i;
+        
+        // Pré-alocar vetor de segmentos (evita realocações)
+        std::vector<Segment> segments;
+        segments.reserve(n_acima * 2 + n_abaixo);
         
         long long attempts = 0;
         
@@ -101,44 +115,48 @@ extern "C" {
                 goto end_search;
             }
             
-            // Construir solução incrementalmente
-            std::vector<Path> paths;
+            // Construir solução incrementalmente com segmentos
+            segments.clear();
             bool has_crossing = false;
             
-            // Adicionar caminhos de pontos acima (via B)
+            // Adicionar segmentos de pontos acima (via B)
             for (int i = 0; i < n_acima; ++i) {
-                int global_a_idx = idx_acima[i];
-                int b_idx = b_perm[i];
+                const int global_a_idx = idx_acima[i];
+                const int b_idx = b_perm[i];
                 
-                Path new_path;
-                new_path.points.push_back(pointsA[global_a_idx]);
-                new_path.points.push_back(pointsB[b_idx]);
-                new_path.points.push_back(target);
+                const Point& pt_a = pointsA[global_a_idx];
+                const Point& pt_b = pointsB[b_idx];
                 
-                if (path_crosses_existing(new_path, paths)) {
+                // Criar dois segmentos: A->B e B->Target
+                const Segment seg1(pt_a, pt_b);
+                const Segment seg2(pt_b, target);
+                
+                // Verificar cruzamentos apenas com segmentos existentes
+                if (segment_intersects_any(seg1, segments) ||
+                    segment_intersects_any(seg2, segments)) {
                     has_crossing = true;
                     break;
                 }
                 
-                paths.push_back(new_path);
+                segments.push_back(seg1);
+                segments.push_back(seg2);
             }
             
             if (has_crossing) continue;
             
-            // Adicionar caminhos de pontos abaixo (direto ao target)
+            // Adicionar segmentos de pontos abaixo (direto ao target)
             for (int i = 0; i < n_abaixo; ++i) {
-                int global_a_idx = idx_abaixo[i];
+                const int global_a_idx = idx_abaixo[i];
+                const Point& pt_a = pointsA[global_a_idx];
                 
-                Path new_path;
-                new_path.points.push_back(pointsA[global_a_idx]);
-                new_path.points.push_back(target);
+                const Segment seg(pt_a, target);
                 
-                if (path_crosses_existing(new_path, paths)) {
+                if (segment_intersects_any(seg, segments)) {
                     has_crossing = true;
                     break;
                 }
                 
-                paths.push_back(new_path);
+                segments.push_back(seg);
             }
             
             if (!has_crossing) {
@@ -148,9 +166,7 @@ extern "C" {
                 result->attempts = attempts;
                 
                 result->b_permutation = new int[n_acima];
-                for (int i = 0; i < n_acima; ++i) {
-                    result->b_permutation[i] = b_perm[i];
-                }
+                std::memcpy(result->b_permutation, b_perm.data(), n_acima * sizeof(int));
                 
                 return result;
             }

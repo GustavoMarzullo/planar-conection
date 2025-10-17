@@ -231,20 +231,18 @@ if __name__ == "__main__":
     # Caso com 20 pontos
     pontos_A = [
         (1750, 200),  # A0  - acima
-        (1780, 95),   # A1  - abaixo
         (1810, 185),  # A2  - acima
         (1840, 110),  # A3  - abaixo
         (1870, 175),  # A4  - acima
-        (1900, 125),  # A5  - abaixo
         (1930, 195),  # A6  - acima
-        (1960, 105),  # A7  - abaixo
-        (1990, 165),  # A8  - acima
+        (2600, 105),  # A7  - abaixo
+        (2500, 200),  # A8  - acima
         (2020, 90),   # A9  - abaixo
-        (2050, 180),  # A10 - acima
+        (2560, 180),  # A10 - acima
         (2080, 115),  # A11 - abaixo
-        (2110, 170),  # A12 - acima
+        (2720, 170),  # A12 - acima
         (2140, 100),  # A13 - abaixo
-        (2170, 190),  # A14 - acima
+        (2600, 190),  # A14 - acima
         (2200, 85),   # A15 - abaixo
         (1720, 160),  # A16 - acima
         (1850, 75),   # A17 - abaixo
